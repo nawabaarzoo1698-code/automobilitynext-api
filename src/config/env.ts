@@ -29,6 +29,11 @@ const schema = z.object({
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   MEDIA_PUBLIC_BASE_URL: z.string().url().optional(),
+  /// For running on one computer without S3: keep uploads in this folder and
+  /// serve them from the API under /media. Ignored when S3 is set.
+  MEDIA_LOCAL_DIR: z.string().optional(),
+  /// The API's own address as the browser reaches it, for local media links.
+  API_PUBLIC_URL: z.string().url().default("http://localhost:4000"),
 
   /// Publishes scheduled articles every minute. Off in tests.
   SCHEDULER_ENABLED: z
