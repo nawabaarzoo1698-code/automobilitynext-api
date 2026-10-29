@@ -1,0 +1,71 @@
+# DigitalOcean App Platform spec for the API.
+# Create the app from this file (Apps → Create App → "Import from app spec"),
+# or with: doctl apps create --spec .do/app.yaml
+# Then fill in the secrets marked CHANGE_ME in the dashboard; never commit them.
+name: automobilitynext-api
+region: blr
+
+databases:
+  - name: db
+    engine: PG
+    version: "16"
+    # A dev database to start; switch to a managed cluster before launch
+    # (set production: true and cluster_name) for backups and standby nodes.
+
+services:
+  - name: api
+    github:
+      repo: nawabaarzoo1698-code/automobilitynext-api
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: Dockerfile
+    http_port: 4000
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    health_check:
+      http_path: /health
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        value: ${db.DATABASE_URL}
+      - key: JWT_SECRET
+        type: SECRET
+        value: CHANGE_ME
+      - key: FIELD_ENCRYPTION_KEY
+        type: SECRET
+        value: CHANGE_ME
+      - key: CORS_ORIGINS
+        value: https://cms.automobilitynext.com,https://www.automobilitynext.com
+      - key: SITE_URL
+        value: https://www.automobilitynext.com
+      - key: COOKIE_DOMAIN
+        value: .automobilitynext.com
+      - key: S3_ENDPOINT
+        value: https://blr1.digitaloceanspaces.com
+      - key: S3_REGION
+        value: blr1
+      - key: S3_BUCKET
+        value: CHANGE_ME
+      - key: S3_ACCESS_KEY_ID
+        type: SECRET
+        value: CHANGE_ME
+      - key: S3_SECRET_ACCESS_KEY
+        type: SECRET
+        value: CHANGE_ME
+      - key: MEDIA_PUBLIC_BASE_URL
+        value: CHANGE_ME
+
+jobs:
+  # Applies database migrations before each new version goes live.
+  - name: migrate
+    kind: PRE_DEPLOY
+    github:
+      repo: nawabaarzoo1698-code/automobilitynext-api
+      branch: main
+    dockerfile_path: Dockerfile
+    run_command: npx prisma migrate deploy
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
