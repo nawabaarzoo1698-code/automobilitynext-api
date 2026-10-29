@@ -1,0 +1,492 @@
+// Automobility Next platform database.
+// Phase 1 scope: staff access, newsroom content, site structure, media, SEO,
+// basic analytics, grievances and newsletter sign-ups. Later phases add
+// newsletters, ads, payouts, events and reader accounts.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Staff access
+// ---------------------------------------------------------------------------
+
+model Role {
+  id          Int         @id @default(autoincrement())
+  name        String      @unique
+  description String?
+  /// "module:action" pairs, e.g. "articles:publish". "*" grants everything.
+  permissions String[]
+  users       StaffUser[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model StaffUser {
+  id           Int       @id @default(autoincrement())
+  name         String
+  email        String    @unique
+  phone        String?
+  passwordHash String
+  avatarUrl    String?
+  active       Boolean   @default(true)
+  roleId       Int
+  role         Role      @relation(fields: [roleId], references: [id])
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  refreshTokens    RefreshToken[]
+  accessLogs       AccessLog[]
+  auditLogs        AuditLog[]
+  articlesCreated  Article[]         @relation("ArticleCreatedBy")
+  articlesUpdated  Article[]         @relation("ArticleUpdatedBy")
+  articlesLocked   Article[]         @relation("ArticleLockedBy")
+  articleRevisions ArticleRevision[]
+  mediaUploaded    MediaAsset[]
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    Int
+  user      StaffUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  ip        String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+enum AccessAction {
+  LOGIN
+  LOGOUT
+  LOGIN_FAILED
+  VIEW
+  ADD
+  EDIT
+}
+
+model AccessLog {
+  id        Int          @id @default(autoincrement())
+  userId    Int?
+  user      StaffUser?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String?
+  action    AccessAction
+  ip        String?
+  userAgent String?
+  remarks   String?
+  createdAt DateTime     @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id        Int        @id @default(autoincrement())
+  userId    Int?
+  user      StaffUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  entity    String
+  entityId  Int
+  action    String
+  changes   Json?
+  createdAt DateTime   @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId, createdAt])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Newsroom
+// ---------------------------------------------------------------------------
+
+model Region {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  /// "IN" for India, "ME" for Middle East.
+  code        String   @unique
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  articles ArticleRegion[]
+  pages    Page[]
+}
+
+model Category {
+  id          Int        @id @default(autoincrement())
+  name        String
+  slug        String     @unique
+  parentId    Int?
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[] @relation("CategoryTree")
+  description String?
+  imageUrl    String?
+  sortOrder   Int        @default(0)
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  primaryArticles   Article[] @relation("PrimaryCategory")
+  secondaryArticles Article[] @relation("SecondaryCategory")
+}
+
+model Tag {
+  id        Int          @id @default(autoincrement())
+  name      String       @unique
+  slug      String       @unique
+  active    Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  articles  ArticleTag[]
+  topics    Topic[]
+}
+
+model Writer {
+  id        Int      @id @default(autoincrement())
+  firstName String
+  lastName  String   @default("")
+  slug      String   @unique
+  email     String?
+  mobile    String?
+  biography String?
+  avatarUrl String?
+  /// { twitter, linkedin, instagram, facebook }
+  social    Json     @default("{}")
+  /// Payout details. PAN and bank account number are encrypted by the API.
+  panEnc            String?
+  gst               String?
+  ratePerStory      Decimal? @db.Decimal(10, 2)
+  bankAccountName   String?
+  bankAccountNumEnc String?
+  ifsc              String?
+  bankName          String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bylines ArticleByline[]
+}
+
+model Agency {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  articles  Article[]
+}
+
+model TopicType {
+  id        Int         @id @default(autoincrement())
+  name      String      @unique
+  parentId  Int?
+  parent    TopicType?  @relation("TopicTypeTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  TopicType[] @relation("TopicTypeTree")
+  active    Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  topics    Topic[]
+}
+
+/// A person, company or theme with its own page (e.g. "Elon Musk").
+model Topic {
+  id          Int       @id @default(autoincrement())
+  title       String
+  subtitle    String?
+  slug        String    @unique
+  description String?
+  imageUrl    String?
+  topicTypeId Int
+  topicType   TopicType @relation(fields: [topicTypeId], references: [id])
+  tagId       Int?
+  tag         Tag?      @relation(fields: [tagId], references: [id], onDelete: SetNull)
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+enum StoryType {
+  REGULAR
+  REVIEW
+  TICKER
+  OPINION
+  INTERVIEW
+}
+
+enum ArticleStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  UNPUBLISHED
+}
+
+model Article {
+  id                  Int           @id @default(autoincrement())
+  title               String
+  seoTitle            String?
+  slug                String        @unique
+  description         String?
+  synopsis            String?
+  leadImageUrl        String?
+  imageCaption        String?
+  imageAlt            String?
+  storyType           StoryType     @default(REGULAR)
+  status              ArticleStatus @default(DRAFT)
+  primaryCategoryId   Int
+  primaryCategory     Category      @relation("PrimaryCategory", fields: [primaryCategoryId], references: [id])
+  secondaryCategoryId Int?
+  secondaryCategory   Category?     @relation("SecondaryCategory", fields: [secondaryCategoryId], references: [id], onDelete: SetNull)
+  agencyId            Int?
+  agency              Agency?       @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  /// Ordered body blocks: text, image/gallery, video, embed.
+  body                Json          @default("[]")
+  /// Review stories: [{ type, value }]
+  reviewCriteria      Json          @default("[]")
+  publishedAt         DateTime?
+  scheduledAt         DateTime?
+  views               Int           @default(0)
+  shares              Int           @default(0)
+  createdById         Int?
+  createdBy           StaffUser?    @relation("ArticleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById         Int?
+  updatedBy           StaffUser?    @relation("ArticleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  /// Edit lock ("Currently accessed by").
+  lockedById          Int?
+  lockedBy            StaffUser?    @relation("ArticleLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+  lockedAt            DateTime?
+  deletedAt           DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  regions   ArticleRegion[]
+  tags      ArticleTag[]
+  bylines   ArticleByline[]
+  revisions ArticleRevision[]
+  viewsDaily PageViewDaily[]
+
+  @@index([status, publishedAt])
+  @@index([primaryCategoryId, publishedAt])
+}
+
+model ArticleRegion {
+  articleId Int
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  regionId  Int
+  region    Region  @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, regionId])
+}
+
+model ArticleTag {
+  articleId Int
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tagId     Int
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, tagId])
+}
+
+model ArticleByline {
+  articleId Int
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  writerId  Int
+  writer    Writer  @relation(fields: [writerId], references: [id], onDelete: Cascade)
+  position  Int     @default(0)
+
+  @@id([articleId, writerId])
+}
+
+model ArticleRevision {
+  id          Int        @id @default(autoincrement())
+  articleId   Int
+  article     Article    @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  data        Json
+  createdById Int?
+  createdBy   StaffUser? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+
+  @@index([articleId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Media
+// ---------------------------------------------------------------------------
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+model MediaAsset {
+  id           Int        @id @default(autoincrement())
+  kind         MediaKind
+  title        String
+  storageKey   String     @unique
+  url          String
+  mimeType     String
+  sizeBytes    Int?
+  altText      String?
+  caption      String?
+  credit       String?
+  width        Int?
+  height       Int?
+  uploadedById Int?
+  uploadedBy   StaffUser? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([kind, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Site structure (Webmaster)
+// ---------------------------------------------------------------------------
+
+model Menu {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  /// HEADER, FOOTER, SUB, SIDEBAR
+  position  String
+  /// Nested items: [{ type, ref, label, target, children }]
+  items     Json     @default("[]")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// A region homepage or landing page built from content blocks.
+model Page {
+  id           Int      @id @default(autoincrement())
+  name         String
+  slug         String   @unique
+  description  String?
+  regionId     Int?
+  region       Region?  @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  visible      Boolean  @default(true)
+  redirectUrl  String?
+  isHomepage   Boolean  @default(false)
+  /// [{ id, title, showTitle, template, contentCount, source: { kind, categoryId?, articleIds? } }]
+  blocks       Json     @default("[]")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum StaticKind {
+  PAGE
+  BOARD_OF_DIRECTORS
+  EDITORIAL_BOARD
+}
+
+model StaticContent {
+  id        Int        @id @default(autoincrement())
+  kind      StaticKind @default(PAGE)
+  title     String
+  slug      String     @unique
+  /// For people (board members): role or designation.
+  subtitle  String?
+  imageUrl  String?
+  html      String     @default("")
+  sortOrder Int        @default(0)
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// SEO
+// ---------------------------------------------------------------------------
+
+model SeoMeta {
+  id              Int      @id @default(autoincrement())
+  /// article, category, page, static
+  entityType      String
+  entityId        Int
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+  ogImageUrl      String?
+  noIndex         Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([entityType, entityId])
+}
+
+model Redirect {
+  id         Int      @id @default(autoincrement())
+  fromPath   String   @unique
+  toPath     String
+  statusCode Int      @default(301)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Audience
+// ---------------------------------------------------------------------------
+
+model PageViewDaily {
+  articleId  Int
+  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  day        DateTime @db.Date
+  regionCode String   @default("")
+  views      Int      @default(0)
+
+  @@id([articleId, day, regionCode])
+  @@index([day])
+}
+
+enum SubscriberStatus {
+  PENDING
+  ACTIVE
+  UNSUBSCRIBED
+}
+
+model NewsletterSubscriber {
+  id           Int              @id @default(autoincrement())
+  email        String           @unique
+  name         String?
+  status       SubscriberStatus @default(PENDING)
+  source       String?
+  confirmToken String?          @unique
+  confirmedAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+enum GrievanceStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+model Grievance {
+  id        Int             @id @default(autoincrement())
+  name      String
+  phone     String?
+  email     String
+  pinCode   String?
+  state     String?
+  message   String
+  status    GrievanceStatus @default(OPEN)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
