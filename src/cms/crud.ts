@@ -48,6 +48,8 @@ export interface WriteContext {
 export interface ResourceDef {
   path: string;
   module: ModuleKey;
+  /** Module whose "view" permission allows reading the list, when that differs from `module`. */
+  readModule?: ModuleKey;
   model: keyof PrismaService & string;
   /** Audit-log entity name; defaults to the model. */
   entity?: string;
@@ -86,7 +88,7 @@ export function crudController(def: ResourceDef): Type<unknown> {
     }
 
     @Get()
-    @RequirePermission(def.module, "view")
+    @RequirePermission(def.readModule ?? def.module, "view")
     async list(@Query() query: Record<string, unknown>) {
       if (!ops.has("list")) throw new NotFoundException();
       const q = parse(listSchema, query) as z.infer<typeof listQuerySchema> & Record<string, unknown>;
@@ -99,7 +101,7 @@ export function crudController(def: ResourceDef): Type<unknown> {
     }
 
     @Get(":id")
-    @RequirePermission(def.module, "view")
+    @RequirePermission(def.readModule ?? def.module, "view")
     async get(@Param("id", ParseIntPipe) id: number) {
       if (!ops.has("get")) throw new NotFoundException();
       const row = await this.table.findUnique({ where: { id }, include: def.include });

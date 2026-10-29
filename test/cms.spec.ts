@@ -67,12 +67,29 @@ describe("CMS tables", () => {
     expect(homes.map((p) => p.name)).toEqual(["EV Page v2"]);
   });
 
+  it("keeps the block builder's layout choices on page blocks", async () => {
+    const res = await t.http().post("/v1/cms/pages").set("Authorization", editor).send({ name: "Layout", blocks: [{ id: "a", block: "Hero Grid", desktopWidth: "Half", displayLogic: "Latest", autoStories: true, source: { kind: "latest" } }] }).expect(201);
+    expect(res.body.blocks[0]).toMatchObject({ block: "Hero Grid", desktopWidth: "Half", displayLogic: "Latest", autoStories: true });
+  });
+
+  it("lets staff add a subscriber and change their status", async () => {
+    const res = await t.http().post("/v1/cms/subscribers").set("Authorization", admin).send({ email: "Fan@Example.com", name: "Fan" }).expect(201);
+    expect(res.body).toMatchObject({ email: "fan@example.com", status: "ACTIVE" });
+    expect(res.body.confirmToken).toBeUndefined();
+    const off = await t.http().patch(`/v1/cms/subscribers/${res.body.id}`).set("Authorization", admin).send({ status: "UNSUBSCRIBED" }).expect(200);
+    expect(off.body).toMatchObject({ status: "UNSUBSCRIBED", name: "Fan" });
+    await t.http().post("/v1/cms/subscribers").set("Authorization", admin).send({ email: "fan@example.com" }).expect(409);
+  });
+
   it("checks permissions on every table", async () => {
     await t.http().get("/v1/cms/categories").set("Authorization", writer).expect(403);
     await t.http().post("/v1/cms/menus").set("Authorization", writer).send({ name: "Main", position: "HEADER" }).expect(403);
     await t.http().delete("/v1/cms/categories/1").set("Authorization", editor).expect(403);
     await t.http().get("/v1/cms/grievances").set("Authorization", editor).expect(403);
     await t.http().get("/v1/cms/grievances").set("Authorization", admin).expect(200);
+    // Writers pick editions in the article editor, so they may read regions but not change them.
+    await t.http().get("/v1/cms/regions").set("Authorization", writer).expect(200);
+    await t.http().post("/v1/cms/regions").set("Authorization", writer).send({ name: "Europe", code: "EU" }).expect(403);
   });
 });
 

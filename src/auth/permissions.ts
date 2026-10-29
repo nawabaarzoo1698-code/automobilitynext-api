@@ -15,7 +15,7 @@ export const MODULES = {
   webmaster: { section: "Newsroom", label: "Menus, Pages, Regions, Static Content", actions: ["view", "create", "edit", "delete"] },
   media: { section: "Library", label: "Media", actions: ["view", "create", "edit", "delete"] },
   seo: { section: "Performance", label: "SEO", actions: ["view", "edit"] },
-  subscribers: { section: "Performance", label: "Newsletter Subscribers", actions: ["view", "delete"] },
+  subscribers: { section: "Performance", label: "Newsletter Subscribers", actions: ["view", "create", "edit", "delete"] },
   users: { section: "Settings", label: "Users", actions: ["view", "create", "edit", "delete"] },
   roles: { section: "Settings", label: "Roles", actions: ["view", "create", "edit", "delete"] },
   settings: { section: "Settings", label: "Global Settings", actions: ["view", "edit"] },

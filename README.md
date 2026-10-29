@@ -108,10 +108,10 @@ notifications, reader accounts and comments.
 
 1. In DigitalOcean, **Apps → Create App → GitHub**, pick this repository, and import `.do/app.yaml` (or run `doctl apps create --spec .do/app.yaml`).
 2. In the app's **Settings → Environment Variables**, replace every `CHANGE_ME`. Generate `JWT_SECRET` with `openssl rand -base64 48` and `FIELD_ENCRYPTION_KEY` with `openssl rand -base64 32`, and keep a copy of the encryption key somewhere safe.
-3. Create a **Spaces** bucket in BLR1 with the CDN on, and a Spaces access key; fill the `S3_*` values and `MEDIA_PUBLIC_BASE_URL`.
+3. Create a **Spaces** bucket in BLR1 with the CDN on, and a Spaces access key; fill the `S3_*` values and `MEDIA_PUBLIC_BASE_URL`. In the bucket's **Settings → CORS**, add a rule for the CMS's address (e.g. `https://cms.automobilitynext.com`) allowing `GET` and `PUT` with all headers, or browser uploads will fail.
 4. Deploy. Every push to `main` then deploys automatically, and the `migrate` job applies database migrations first.
 5. Create the first administrator once, from the app's **Console** tab: `ADMIN_EMAIL=... ADMIN_PASSWORD='...' npx prisma db seed`.
-6. Point `api.automobilitynext.com` at the app (Settings → Domains).
+6. Point `api.automobilitynext.com` at the app (Settings → Domains), and set `CORS_ORIGINS` to the CMS's address.
 
 If the app logs a "self-signed certificate" error connecting to the database,
 append `&uselibpqcompat=true` to `DATABASE_URL`; DigitalOcean's managed

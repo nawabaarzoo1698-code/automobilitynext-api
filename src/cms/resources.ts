@@ -35,6 +35,8 @@ const withCount = (row: Record<string, unknown>, key: string, as: string) => {
 export const regions: ResourceDef = {
   path: "regions",
   module: "webmaster",
+  // Anyone who works on articles picks editions, so they can read the list.
+  readModule: "articles",
   model: "region",
   create: z.object({
     name: text(),
@@ -196,9 +198,10 @@ export const topics: ResourceDef = {
 
 // --- Menus and pages -------------------------------------------------------
 
-type MenuItem = { type: "Category" | "Page" | "Custom"; ref: string; label: string; target: "Same Window" | "New Window"; showSubcategories?: boolean; children?: MenuItem[] };
+type MenuItem = { id?: string; type: "Category" | "Page" | "Custom"; ref: string; label: string; target: "Same Window" | "New Window"; showSubcategories?: boolean; children?: MenuItem[] };
 const menuItem: z.ZodType<MenuItem> = z.lazy(() =>
   z.object({
+    id: z.string().max(50).optional(),
     type: z.enum(["Category", "Page", "Custom"]),
     ref: z.string().max(500),
     label: text(100),
@@ -229,6 +232,11 @@ export const pageBlockSchema = z.object({
   showTitle: z.boolean().default(true),
   template: z.string().max(50).default("grid"),
   contentCount: z.number().int().min(1).max(50).default(6),
+  /// Layout choices from the CMS block builder; the site reads them as given.
+  block: z.string().max(50).optional(),
+  desktopWidth: z.string().max(50).optional(),
+  displayLogic: z.string().max(50).optional(),
+  autoStories: z.boolean().optional(),
   source: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("latest") }),
     z.object({ kind: z.literal("category"), categoryId: z.number().int().positive() }),
@@ -356,8 +364,13 @@ export const subscribers: ResourceDef = {
   module: "subscribers",
   model: "newsletterSubscriber",
   entity: "subscriber",
-  ops: ["list", "get", "delete"],
-  create: z.object({}),
+  // Staff can add a subscriber by hand (already confirmed) or change their status.
+  create: z.object({
+    email: z.email().transform((e) => e.toLowerCase()),
+    name: optionalText(100),
+    status: z.enum(["PENDING", "ACTIVE", "UNSUBSCRIBED"]).default("ACTIVE"),
+  }),
+  update: z.object({ name: optionalText(100), status: z.enum(["PENDING", "ACTIVE", "UNSUBSCRIBED"]) }).partial(),
   filters: {
     schema: z.object({ status: z.enum(["PENDING", "ACTIVE", "UNSUBSCRIBED"]).optional() }),
     where: (q) => ({ status: q.status }),
