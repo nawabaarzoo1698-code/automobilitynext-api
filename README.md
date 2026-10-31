@@ -10,23 +10,28 @@ the Android and iOS apps.
 
 ## Run it locally
 
-You need Node.js 22 and either Docker or a local PostgreSQL 16.
+You need Node.js 22, Git, and Docker Desktop (or a local PostgreSQL 16).
 
 ```bash
 docker compose up -d              # PostgreSQL on localhost:5432 (plus a test database)
-cp .env.example .env              # then fill JWT_SECRET and FIELD_ENCRYPTION_KEY
 npm install
-npm run db:migrate                # create the tables
-ADMIN_EMAIL=you@automobilitynext.com ADMIN_PASSWORD='a-long-password' npm run db:seed
+npm run setup                     # .env with new secrets, tables, starting data, your admin sign-in
 npm run start:dev                 # http://localhost:4000, docs at http://localhost:4000/docs
 ```
 
-The seed creates the roles (Super Admin, Editor, Writer, SEO Editor), the
-India and Middle East regions, the categories from the old CMS, the two region
-homepages, and your administrator account. Running it again changes nothing.
+`npm run setup` asks for your administrator email and password. It also turns
+on local media storage (`MEDIA_LOCAL_DIR=./media-uploads`): without
+DigitalOcean Spaces, uploads are kept in that folder and served by the API at
+`http://localhost:4000/media/...`. Production ignores this setting and uses Spaces.
+
+The starting data is the roles (Super Admin, Editor, Writer, SEO Editor), the
+India and Middle East regions, the categories from the old CMS and the two
+region homepages. Running setup again keeps your `.env` and changes nothing
+that exists.
 
 | Script | What it does |
 | --- | --- |
+| `npm run setup` | First-time local setup (safe to run again) |
 | `npm run start:dev` | Compile and restart on every change |
 | `npm test` | Run the test suite against the `automobilitynext_test` database |
 | `npm run typecheck` | Type-check without building |

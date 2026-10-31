@@ -6,3 +6,4 @@ coverage/
 !.env.example
 src/generated/
 *.log
+media-uploads/
