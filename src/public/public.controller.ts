@@ -10,6 +10,8 @@ import { parse } from "../common/validation.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { pageBlockSchema } from "../cms/resources.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { articleGraph, collectionGraph, vocabulary, writerGraph } from "../rdf/jsonld.js";
+import { ldArticleSelect, ldTagSelect, ldTermSelect, ldWriterSelect, toLdArticle } from "../rdf/select.js";
 
 // Read-only API for the news website and the mobile apps. Only published,
 // active content is visible. Responses are cacheable at the CDN for a minute.
@@ -99,15 +101,16 @@ export class PublicController {
         primaryCategory: { select: { id: true, name: true, slug: true } },
         secondaryCategory: { select: { name: true, slug: true } },
         agency: { select: { name: true } },
-        tags: { select: { tag: { select: { name: true, slug: true } } } },
+        tags: { select: { tag: { select: { name: true, slug: true, entityType: true, sameAs: true } } } },
         regions: { select: { region: { select: { name: true, code: true } } } },
         bylines: { orderBy: { position: "asc" }, select: { writer: { select: { firstName: true, lastName: true, slug: true, avatarUrl: true, biography: true, social: true } } } },
       },
     });
     if (!a) throw new NotFoundException({ error: "not_found", message: "Article not found" });
-    const [seo, related] = await Promise.all([
+    const [seo, related, ld] = await Promise.all([
       this.prisma.seoMeta.findUnique({ where: { entityType_entityId: { entityType: "article", entityId: a.id } } }),
       this.prisma.article.findMany({ where: { ...live(), primaryCategoryId: a.primaryCategoryId, NOT: { id: a.id } }, select: cardSelect, orderBy: { publishedAt: "desc" }, take: 6 }),
+      this.prisma.article.findUniqueOrThrow({ where: { id: a.id }, select: ldArticleSelect }),
     ]);
     const { createdById: _c, updatedById: _u, lockedById: _l, lockedAt: _la, deletedAt: _d, scheduledAt: _s, ...article } = a;
     return {
@@ -124,6 +127,8 @@ export class PublicController {
         noIndex: seo?.noIndex ?? false,
       },
       related: related.map(card),
+      /** RDF metadata for the page: put it in a <script type="application/ld+json">. */
+      jsonLd: articleGraph(toLdArticle(ld)),
     };
   }
 
@@ -139,27 +144,44 @@ export class PublicController {
   async category(@Param("slug") slug: string) {
     const c = await this.prisma.category.findFirst({
       where: { slug, active: true },
-      select: { id: true, name: true, slug: true, description: true, imageUrl: true, parent: { select: { name: true, slug: true } }, children: { where: { active: true }, select: { name: true, slug: true } } },
+      select: { id: true, name: true, slug: true, description: true, imageUrl: true, sameAs: true, parent: { select: { name: true, slug: true } }, children: { where: { active: true }, select: { name: true, slug: true } } },
     });
     if (!c) throw new NotFoundException({ error: "not_found", message: "Category not found" });
-    const seo = await this.prisma.seoMeta.findUnique({ where: { entityType_entityId: { entityType: "category", entityId: c.id } } });
-    return { ...c, seo };
+    const [seo, latest] = await Promise.all([
+      this.prisma.seoMeta.findUnique({ where: { entityType_entityId: { entityType: "category", entityId: c.id } } }),
+      this.prisma.article.findMany({ where: { ...live(), primaryCategoryId: c.id }, select: { title: true, slug: true }, orderBy: { publishedAt: "desc" }, take: 20 }),
+    ]);
+    return { ...c, seo, jsonLd: collectionGraph("section", c, latest.map((a) => ({ ...a, categorySlug: c.slug }))) };
   }
 
   @Get("writers/:slug")
   @Header("Cache-Control", CACHE)
   async writer(@Param("slug") slug: string) {
-    const w = await this.prisma.writer.findFirst({ where: { slug, active: true }, select: { firstName: true, lastName: true, slug: true, biography: true, avatarUrl: true, social: true } });
+    const w = await this.prisma.writer.findFirst({ where: { slug, active: true }, select: ldWriterSelect });
     if (!w) throw new NotFoundException({ error: "not_found", message: "Author not found" });
-    return { name: `${w.firstName} ${w.lastName}`.trim(), ...w };
+    return { name: `${w.firstName} ${w.lastName}`.trim(), ...w, jsonLd: writerGraph(w) };
   }
 
   @Get("tags/:slug")
   @Header("Cache-Control", CACHE)
   async tag(@Param("slug") slug: string) {
-    const t = await this.prisma.tag.findFirst({ where: { slug, active: true }, select: { name: true, slug: true, topics: { where: { active: true }, select: { title: true, subtitle: true, description: true, imageUrl: true } } } });
+    const t = await this.prisma.tag.findFirst({ where: { slug, active: true }, select: { id: true, ...ldTagSelect, topics: { where: { active: true }, select: { title: true, subtitle: true, description: true, imageUrl: true } } } });
     if (!t) throw new NotFoundException({ error: "not_found", message: "Tag not found" });
-    return t;
+    const latest = await this.prisma.article.findMany({ where: { ...live(), tags: { some: { tagId: t.id } } }, select: { title: true, slug: true, primaryCategory: { select: { slug: true } } }, orderBy: { publishedAt: "desc" }, take: 20 });
+    const { id: _id, ...tag } = t;
+    return { ...tag, jsonLd: collectionGraph("tag", t, latest.map((a) => ({ title: a.title, slug: a.slug, categorySlug: a.primaryCategory.slug }))) };
+  }
+
+  /** The topic vocabulary (sections and tags) as RDF, for {SITE}/ns/segments. */
+  @Get("ns/segments")
+  @Header("Cache-Control", CACHE)
+  @Header("Content-Type", "application/ld+json; charset=utf-8")
+  async segments() {
+    const [categories, tags] = await Promise.all([
+      this.prisma.category.findMany({ where: { active: true }, select: ldTermSelect, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+      this.prisma.tag.findMany({ where: { active: true }, select: ldTagSelect, orderBy: { name: "asc" } }),
+    ]);
+    return vocabulary(categories, tags);
   }
 
   @Get("menus")

@@ -12,6 +12,8 @@ import type { ResourceDef, WriteContext } from "./crud.js";
 const text = (max = 200) => z.string().trim().min(1).max(max);
 const optionalText = (max = 2000) => z.string().trim().max(max).nullish();
 const url = z.string().trim().url().max(2000).nullish();
+/** RDF sameAs: links to public records (Wikipedia, Wikidata, official site) for the same thing. */
+const sameAs = z.array(z.string().trim().url().max(500)).max(10).default([]);
 const boolFilter = z.enum(["true", "false"]).transform((v) => v === "true").optional();
 
 type SlugTable = "category" | "tag" | "writer" | "topic" | "page" | "staticContent";
@@ -63,6 +65,7 @@ export const categories: ResourceDef = {
     parentId: z.number().int().positive().nullish(),
     description: optionalText(),
     imageUrl: url,
+    sameAs,
     sortOrder: z.number().int().default(0),
     active: z.boolean().default(true),
   }),
@@ -84,7 +87,14 @@ export const tags: ResourceDef = {
   path: "tags",
   module: "tags",
   model: "tag",
-  create: z.object({ name: text(100), slug: z.string().trim().max(120).optional(), active: z.boolean().default(true) }),
+  create: z.object({
+    name: text(100),
+    slug: z.string().trim().max(120).optional(),
+    description: optionalText(1000),
+    entityType: z.enum(["THING", "ORGANIZATION", "BRAND", "PERSON", "PLACE", "PRODUCT", "EVENT"]).default("THING"),
+    sameAs,
+    active: z.boolean().default(true),
+  }),
   filters: {
     schema: z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional() }),
     where: (q) => (q.from || q.to ? { createdAt: { gte: q.from, lte: q.to } } : {}),
@@ -111,6 +121,7 @@ const writerSchema = z.object({
     .object({ twitter: url, linkedin: url, instagram: url, facebook: url })
     .partial()
     .default({}),
+  sameAs,
   pan: z.string().trim().toUpperCase().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, "PAN looks like ABCDE1234F").nullish(),
   gst: z.string().trim().max(20).nullish(),
   ratePerStory: z.number().nonnegative().nullish(),

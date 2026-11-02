@@ -14,6 +14,8 @@ import { type ListQuery, orderBy, page, paging } from "../common/list-query.js";
 import { slugify, uniqueSlug } from "../common/text.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { articleGraph } from "../rdf/jsonld.js";
+import { ldArticleSelect, toLdArticle } from "../rdf/select.js";
 import type { ArticleCreate, ArticleUpdate } from "./article.schema.js";
 
 /** An edit lock older than this is treated as abandoned. */
@@ -208,6 +210,13 @@ export class ArticlesService implements OnModuleInit, OnModuleDestroy {
       throw new HttpException({ error: "locked", message: "Someone else is editing this article" }, HttpStatus.LOCKED);
     }
     await this.prisma.article.update({ where: { id }, data: { lockedById: null, lockedAt: null } });
+  }
+
+  /** The RDF metadata the news site will publish for this article, for checking before it goes live. */
+  async jsonLd(id: number) {
+    const row = await this.prisma.article.findFirst({ where: { id, deletedAt: null }, select: ldArticleSelect });
+    if (!row) throw new NotFoundException({ error: "not_found", message: "Article not found" });
+    return articleGraph(toLdArticle(row));
   }
 
   revisions(id: number) {

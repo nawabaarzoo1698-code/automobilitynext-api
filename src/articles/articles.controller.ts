@@ -85,6 +85,12 @@ export class ArticlesController {
     return this.articles.unlock(id, user.id, force === "true" && can(user.permissions, "articles", "publish"));
   }
 
+  @Get(":id/jsonld")
+  @RequirePermission("articles", "view")
+  jsonLd(@Param("id", ParseIntPipe) id: number) {
+    return this.articles.jsonLd(id);
+  }
+
   @Get(":id/revisions")
   @RequirePermission("articles", "view")
   revisions(@Param("id", ParseIntPipe) id: number) {

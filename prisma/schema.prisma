@@ -4,9 +4,9 @@
 // newsletters, ads, payouts, events and reader accounts.
 
 generator client {
-  provider     = "prisma-client"
-  output       = "../src/generated/prisma"
-  moduleFormat = "esm"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
   importFileExtension = "js"
 }
 
@@ -138,6 +138,8 @@ model Category {
   description String?
   imageUrl    String?
   sortOrder   Int        @default(0)
+  /// Public records for the same topic (Wikipedia, Wikidata): RDF sameAs.
+  sameAs      String[]   @default([])
   active      Boolean    @default(true)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -146,28 +148,45 @@ model Category {
   secondaryArticles Article[] @relation("SecondaryCategory")
 }
 
+/// What a tag stands for in the RDF metadata (schema.org additionalType).
+enum EntityType {
+  THING
+  ORGANIZATION
+  BRAND
+  PERSON
+  PLACE
+  PRODUCT
+  EVENT
+}
+
 model Tag {
-  id        Int          @id @default(autoincrement())
-  name      String       @unique
-  slug      String       @unique
-  active    Boolean      @default(true)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  articles  ArticleTag[]
-  topics    Topic[]
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  slug        String       @unique
+  description String?
+  entityType  EntityType   @default(THING)
+  /// Public records for the same thing (Wikipedia, Wikidata, official site): RDF sameAs.
+  sameAs      String[]     @default([])
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  articles    ArticleTag[]
+  topics      Topic[]
 }
 
 model Writer {
-  id        Int      @id @default(autoincrement())
-  firstName String
-  lastName  String   @default("")
-  slug      String   @unique
-  email     String?
-  mobile    String?
-  biography String?
-  avatarUrl String?
+  id                Int      @id @default(autoincrement())
+  firstName         String
+  lastName          String   @default("")
+  slug              String   @unique
+  email             String?
+  mobile            String?
+  biography         String?
+  avatarUrl         String?
   /// { twitter, linkedin, instagram, facebook }
-  social    Json     @default("{}")
+  social            Json     @default("{}")
+  /// Other public profiles (Wikipedia, Muck Rack, personal site); with `social`, the RDF sameAs.
+  sameAs            String[] @default([])
   /// Payout details. PAN and bank account number are encrypted by the API.
   panEnc            String?
   gst               String?
@@ -176,9 +195,9 @@ model Writer {
   bankAccountNumEnc String?
   ifsc              String?
   bankName          String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   bylines ArticleByline[]
 }
@@ -274,10 +293,10 @@ model Article {
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
-  regions   ArticleRegion[]
-  tags      ArticleTag[]
-  bylines   ArticleByline[]
-  revisions ArticleRevision[]
+  regions    ArticleRegion[]
+  tags       ArticleTag[]
+  bylines    ArticleByline[]
+  revisions  ArticleRevision[]
   viewsDaily PageViewDaily[]
 
   @@index([status, publishedAt])
@@ -373,20 +392,20 @@ model Menu {
 
 /// A region homepage or landing page built from content blocks.
 model Page {
-  id           Int      @id @default(autoincrement())
-  name         String
-  slug         String   @unique
-  description  String?
-  regionId     Int?
-  region       Region?  @relation(fields: [regionId], references: [id], onDelete: SetNull)
-  visible      Boolean  @default(true)
-  redirectUrl  String?
-  isHomepage   Boolean  @default(false)
+  id          Int      @id @default(autoincrement())
+  name        String
+  slug        String   @unique
+  description String?
+  regionId    Int?
+  region      Region?  @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  visible     Boolean  @default(true)
+  redirectUrl String?
+  isHomepage  Boolean  @default(false)
   /// [{ id, title, showTitle, template, contentCount, source: { kind, categoryId?, articleIds? } }]
-  blocks       Json     @default("[]")
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  blocks      Json     @default("[]")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 enum StaticKind {
